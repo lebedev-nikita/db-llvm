@@ -1,16 +1,36 @@
-# Project direction notes
+# Project Context
 
 ## Goal
 
-Build a compiler-style toolkit for database schemas: parse SQL schema
-definitions, normalize them into a stable IR, diff old/new snapshots, and
-generate migration SQL for the target database.
+Build a compiler-style toolkit for PostgreSQL schema changes: parse PostgreSQL
+schema SQL, normalize it into a stable intermediate representation, diff old/new
+snapshots, and generate PostgreSQL migration SQL.
 
-## Practical starting point
+## Core Pipeline
 
-Start with the data model and diff engine, not broad dialect coverage.
+```text
+PostgreSQL schema SQL
+   ↓
+AST
+   ↓
+normalized IR
+   ↓
+schema diff
+   ↓
+migration plan
+   ↓
+PostgreSQL SQL generator
+   ↓
+migration files + snapshot
+```
 
-The first useful version should target PostgreSQL schema SQL:
+The project should start narrow and harden the data model and diff engine before
+expanding into introspection, richer PostgreSQL features, or additional
+providers.
+
+## MVP Scope
+
+The first useful version targets PostgreSQL schema SQL:
 
 ```sql
 CREATE TABLE users (
@@ -29,7 +49,7 @@ CREATE TABLE posts (
 CREATE INDEX posts_author_id ON posts (author_id);
 ```
 
-The MVP should support:
+The MVP supports:
 
 - `CREATE TABLE`
 - columns
@@ -39,28 +59,35 @@ The MVP should support:
 - foreign keys
 - defaults
 - nullable and not-null columns
-- simple migrations
-- PostgreSQL generation first
+- schema snapshots
+- diff old/new
+- PostgreSQL migration generation
+- safe/unsafe migration operation classification
 
-## Core pipeline
+Unsupported initially:
 
-```text
-PostgreSQL schema SQL
-   ↓
-AST
-   ↓
-normalized IR
-   ↓
-schema diff
-   ↓
-migration plan
-   ↓
-provider SQL generator
-   ↓
-migration files + snapshot
-```
+- views
+- triggers
+- RLS
+- extensions
+- enums
+- stored procedures
+- introspection
+- additional providers
 
-## Schema diff
+## Public API
+
+The public API should expose:
+
+- `parsePostgresSchema(source: string): Promise<Schema>`
+- `normalizeSchema(schema: Schema): NormalizedSchema`
+- `diffSchemas(oldSchema: NormalizedSchema, newSchema: NormalizedSchema): MigrationPlan`
+- `generatePostgresCreateSchema(schema: NormalizedSchema): string`
+- `generatePostgresMigration(plan: MigrationPlan): string`
+- `serializeSnapshot(schema: NormalizedSchema): string`
+- `parseSnapshot(json: string): NormalizedSchema`
+
+## Schema Diff
 
 The diff engine compares:
 
@@ -83,7 +110,7 @@ ChangeColumnType(...)
 Not every change can be inferred safely. Rename vs. drop+add often needs an
 explicit hint or manual review.
 
-## Safety model
+## Safety Model
 
 Safe examples:
 
@@ -101,7 +128,7 @@ Unsafe examples:
 Unsafe operations should produce warnings or require explicit annotations in the
 migration plan.
 
-## Provider capabilities
+## Provider Capabilities
 
 Providers do not support the same features. Keep a capabilities layer:
 
@@ -115,7 +142,7 @@ type ProviderCapabilities = {
 };
 ```
 
-## Snapshot files
+## Snapshot Files
 
 After each migration, save the normalized schema:
 
@@ -134,7 +161,7 @@ New schemas should be compared to the last snapshot first. Database
 introspection is useful later, but snapshots are simpler and reproducible for
 the first implementation.
 
-## Testing approach
+## Testing Approach
 
 Test migrations like a compiler:
 
@@ -145,24 +172,10 @@ expected migration operations
 expected SQL
 ```
 
-## MVP
+Coverage should include:
 
-```text
-v0.1:
-- PostgreSQL schema SQL input
-- PostgreSQL output
-- tables
-- columns
-- primary keys
-- unique constraints
-- indexes
-- foreign keys
-- defaults
-- nullable/not-null
-- schema snapshots
-- diff old/new
-- SQL migration generation
-```
-
-Triggers, RLS, views, stored procedures, introspection, and additional providers
-should come after the diff model is stable.
+- parsing the PostgreSQL example schema
+- primary key, unique, not null, default, and foreign keys
+- malformed or unsupported SQL parser errors
+- deterministic normalization and snapshot round-trips
+- create table, add column, drop column, type change, add index, and generated SQL
