@@ -74,18 +74,20 @@ function parseTable(name: string, lines: string[], startIndex: number): readonly
 }
 
 function parseColumn(line: string, lineNumber: number): Column {
-  const match = line.match(new RegExp(`^(${identifierPattern})\\s+(${identifierPattern})(?:\\s+(.*))?$`));
+  const match = line.match(new RegExp(`^(${identifierPattern})\\s+(${identifierPattern}\\??)(?:\\s+(.*))?$`));
   if (!match) {
-    throw new ParseError("expected column declaration: <name> <type> [attributes]", lineNumber);
+    throw new ParseError("expected column declaration: <name> <type[?]> [attributes]", lineNumber);
   }
 
+  const rawType = match[2]!;
+  const nullable = rawType.endsWith("?");
   const tokens = tokenizeAttributes(match[3] ?? "");
   const column: MutableColumn = {
     name: match[1]!,
-    type: match[2]!,
+    type: nullable ? rawType.slice(0, -1) : rawType,
     primaryKey: false,
     unique: false,
-    nullable: true,
+    nullable,
   };
 
   for (let index = 0; index < tokens.length; index += 1) {
@@ -101,13 +103,6 @@ function parseColumn(line: string, lineNumber: number): Column {
 
     if (token === "unique") {
       column.unique = true;
-      continue;
-    }
-
-    if (token === "not") {
-      expectToken(tokens, index + 1, "null", lineNumber);
-      column.nullable = false;
-      index += 1;
       continue;
     }
 

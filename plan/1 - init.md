@@ -22,20 +22,22 @@ migration operation classification.
   - index.ts: public exports only.
 - Use this MVP DSL shape:
 
+```ddl
 table users {
-id uuid primary key
-email text unique not null
-created_at timestamp default now()
+  id uuid primary key
+  email text unique not null
+  created_at timestamp default now()
 }
 
 table posts {
-id uuid primary key
-author_id uuid references users.id on delete cascade
-title text not null
-body text
+  id uuid primary key
+  author_id uuid references users.id on delete cascade
+  title text not null
+  body text
 }
 
 index posts_author_id on posts(author_id)
+```
 
 - Public API should expose:
   - parseSchema(source: string): Schema

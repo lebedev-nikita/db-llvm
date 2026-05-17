@@ -15,15 +15,15 @@ import {
 const source = dedent`
   table users {
     id uuid primary key
-    email text unique not null
+    email text unique
     created_at timestamp default now()
   }
 
   table posts {
     id uuid primary key
     author_id uuid references users.id on delete cascade
-    title text not null
-    body text
+    title text
+    body text?
   }
 
   index posts_author_id on posts(author_id)
@@ -59,10 +59,18 @@ test("parses the MVP schema syntax", () => {
     column: "id",
     onDelete: "cascade",
   });
+  expect(posts?.columns.find((column) => column.name === "body")).toMatchObject({
+    type: "text",
+    nullable: true,
+  });
 });
 
 test("rejects malformed syntax with a parse error", () => {
   expect(() => parseSchema("table users {\n  id\n}")).toThrow(ParseError);
+});
+
+test("rejects legacy not null syntax", () => {
+  expect(() => parseSchema("table users {\n  email text not null\n}")).toThrow(ParseError);
 });
 
 test("normalizes and round-trips snapshots deterministically", () => {
@@ -79,7 +87,7 @@ test("diffs creates, safe column additions, unsafe drops, unsafe type changes, a
     parseSchema(dedent`
       table users {
         id uuid primary key
-        email text not null
+        email text
         age int
       }
     `),
@@ -88,8 +96,8 @@ test("diffs creates, safe column additions, unsafe drops, unsafe type changes, a
     parseSchema(dedent`
       table users {
         id uuid primary key
-        email varchar not null
-        name text
+        email varchar
+        name text?
       }
 
       table posts {
@@ -116,7 +124,7 @@ test("diffs creates, safe column additions, unsafe drops, unsafe type changes, a
 
 test("adding a non-null column is unsafe", () => {
   const oldSchema = normalizeSchema(parseSchema("table users {\n  id uuid primary key\n}"));
-  const newSchema = normalizeSchema(parseSchema("table users {\n  id uuid primary key\n  email text not null\n}"));
+  const newSchema = normalizeSchema(parseSchema("table users {\n  id uuid primary key\n  email text\n}"));
 
   const plan = diffSchemas(oldSchema, newSchema);
 
@@ -130,14 +138,14 @@ test("generates PostgreSQL create schema SQL", () => {
   expect(sql).toMatch(/CREATE TABLE "users"/);
   expect(sql).toMatch(/"id" uuid PRIMARY KEY/);
   expect(sql).toMatch(/"email" text UNIQUE NOT NULL/);
-  expect(sql).toMatch(/"created_at" timestamp DEFAULT now\(\)/);
+  expect(sql).toMatch(/"created_at" timestamp NOT NULL DEFAULT now\(\)/);
   expect(sql).toMatch(/REFERENCES "users" \("id"\) ON DELETE CASCADE/);
   expect(sql).toMatch(/CREATE INDEX "posts_author_id" ON "posts" \("author_id"\)/);
 });
 
 test("generates PostgreSQL migration SQL with safety comments", () => {
   const oldSchema = normalizeSchema(parseSchema("table users {\n  id uuid primary key\n}"));
-  const newSchema = normalizeSchema(parseSchema("table users {\n  id uuid primary key\n  email text\n}"));
+  const newSchema = normalizeSchema(parseSchema("table users {\n  id uuid primary key\n  email text?\n}"));
   const sql = generatePostgresMigration(diffSchemas(oldSchema, newSchema));
 
   expect(sql).toMatch(/-- SAFE: add_column/);

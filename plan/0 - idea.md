@@ -32,15 +32,15 @@
    ```ddl
    table users {
      id uuid primary key
-     email text unique not null
+     email text unique
      created_at timestamp default now()
    }
 
    table posts {
      id uuid primary key
      author_id uuid references users.id on delete cascade
-     title text not null
-     body text
+     title text
+     body text?
    }
    ```
 
@@ -66,7 +66,7 @@
    Например:
 
    ```text
-   AddColumn(users, "name", text, nullable=true)
+   AddColumn(users, "name", text?, nullable=true)
    RenameColumn(users, "username", "handle")
    DropIndex(...)
    ChangeColumnType(...)
@@ -78,21 +78,21 @@
    Например:
 
    Safe:
-   - добавить nullable column
+   - добавить nullable column (`type?`)
    - добавить index concurrently
    - добавить таблицу
 
    Unsafe:
    - удалить колонку
    - изменить тип
-   - сделать nullable → not null
+   - сделать nullable (`type?`) → non-null (`type`)
    - переименовать без явного указания
 
    Для unsafe-операций делайте предупреждения или требуйте аннотации:
 
    ```ddl
    @renamed_from("username")
-   handle text not null
+   handle text
    ```
 
 5. **Сначала поддержите один provider**
@@ -129,7 +129,8 @@
    ```ddl
    table users {
      id uuid @primary
-     email string @unique @notNull
+     email string @unique
+     displayName string?
      createdAt timestamp @default(now)
    }
    ```
@@ -201,7 +202,7 @@ v0.1:
 - indexes
 - foreign keys
 - defaults
-- nullable/not null
+- non-null by default, nullable with `?`
 - schema snapshot
 - diff old/new
 - SQL migration generation
