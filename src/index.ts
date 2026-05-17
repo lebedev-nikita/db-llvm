@@ -1,6 +1,6 @@
 export { diffSchemas } from "./diff.js";
 export { normalizeSchema, parseSnapshot, SchemaValidationError, serializeSnapshot } from "./normalize.js";
-export { ParseError, parseSchema } from "./parser.js";
+export { ParseError, parsePostgresSchema } from "./parser.js";
 export { generatePostgresCreateSchema, generatePostgresMigration } from "./postgres.js";
 export type {
   AddColumnOperation,

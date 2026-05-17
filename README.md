@@ -1,22 +1,22 @@
-# ddl-lang
+# db-llvm
 
-`ddl-lang` is an experimental compiler toolkit for database schemas.
+`db-llvm` is an experimental compiler toolkit for PostgreSQL schema changes.
 
-The long-term goal is to be LLVM for DDL: parse schemas from different SQL
-dialects or declarative schema languages, lower them into a stable intermediate
-representation, compare that representation with a previous schema snapshot, and
-emit migrations for a target database.
+The goal is to be LLVM for database schema changes: parse schemas from SQL
+dialects, lower them into a stable intermediate representation, compare that
+representation with a previous schema snapshot, and emit migrations for a target
+database.
 
-The current implementation is the first vertical slice of that pipeline:
+The intended first slice is PostgreSQL-in, PostgreSQL-out:
 
 ```text
-DDL source
+PostgreSQL schema SQL
   -> parsed schema
   -> normalized intermediate representation
   -> snapshot JSON
   -> schema diff
   -> migration plan
-  -> PostgreSQL SQL
+  -> PostgreSQL migration SQL
 ```
 
 ## Status
@@ -25,7 +25,7 @@ This project is in research stage. Backwards compatibility is not a goal yet.
 
 Implemented:
 
-- Handwritten parser for a small declarative DDL syntax
+- PostgreSQL schema SQL parser for the first MVP subset
 - Intermediate representation for tables, columns, indexes, defaults, uniqueness,
   primary keys, and foreign keys
 - Deterministic normalization and JSON snapshot serialization
@@ -34,89 +34,35 @@ Implemented:
 - Safe/unsafe migration operation classification
 - PostgreSQL `CREATE TABLE`, `CREATE INDEX`, and migration SQL generation
 
-Not implemented yet:
+Planned:
 
-- Parsing existing PostgreSQL, MySQL, SQLite, or other SQL dialect DDL
-- Database introspection
+- PostgreSQL introspection
 - Rename annotations or rename inference
 - Views, triggers, enums, extensions, RLS, functions, policies, and generated columns
 - CLI and migration file management
+- Additional input and output dialects after the PostgreSQL pipeline is stable
 
-## Schema Syntax
+## Example Input
 
-Columns are non-null by default. Add `?` after the type to make a column nullable.
-
-```ddl
-table users {
-  id uuid primary key
-  email text unique
-  display_name text?
-  created_at timestamp default now()
-}
-
-table posts {
-  id uuid primary key
-  author_id uuid references users.id on delete cascade
-  title text
-  body text?
-}
-
-index posts_author_id on posts(author_id)
-unique index users_email on users(email)
-```
-
-Supported column attributes:
-
-- `primary key`
-- `unique`
-- `default <value>`
-- `references <table>.<column>`
-- `references <table>.<column> on delete cascade`
-- `references <table>.<column> on delete restrict`
-- `references <table>.<column> on delete set null`
-- `references <table>.<column> on delete set default`
-- `references <table>.<column> on delete no action`
-
-Line comments can use `#` or `//`.
-
-## Public API
-
-```ts
-import {
-  diffSchemas,
-  generatePostgresCreateSchema,
-  generatePostgresMigration,
-  normalizeSchema,
-  parseSchema,
-  parseSnapshot,
-  serializeSnapshot,
-} from "ddl-lang";
-
-const oldSchema = normalizeSchema(parseSchema(`
-  table users {
-    id uuid primary key
-  }
-`));
-
-const newSchema = normalizeSchema(parseSchema(`
-  table users {
-    id uuid primary key
-    email text?
-  }
-`));
-
-const snapshot = serializeSnapshot(newSchema);
-const restored = parseSnapshot(snapshot);
-const plan = diffSchemas(oldSchema, restored);
-
-console.log(generatePostgresMigration(plan));
-```
-
-Generated migration SQL includes operation safety comments:
+PostgreSQL is the reference input dialect.
 
 ```sql
--- SAFE: add_column
-ALTER TABLE "users" ADD COLUMN "email" text;
+CREATE TABLE users (
+  id uuid PRIMARY KEY,
+  email text UNIQUE NOT NULL,
+  display_name text,
+  created_at timestamp NOT NULL DEFAULT now()
+);
+
+CREATE TABLE posts (
+  id uuid PRIMARY KEY,
+  author_id uuid NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+  title text NOT NULL,
+  body text
+);
+
+CREATE INDEX posts_author_id ON posts (author_id);
+CREATE UNIQUE INDEX users_email ON users (email);
 ```
 
 ## Intermediate Representation
@@ -154,6 +100,52 @@ be non-null, and validates duplicate names, foreign keys, and index targets.
 
 Snapshots are canonical JSON produced from the normalized IR. Diffs compare
 snapshots, not a live database.
+
+## Programmatic API
+
+Parse PostgreSQL schema SQL, normalize it, snapshot it, diff it, and generate a
+PostgreSQL migration:
+
+```ts
+import {
+  diffSchemas,
+  generatePostgresMigration,
+  normalizeSchema,
+  parsePostgresSchema,
+  parseSnapshot,
+  serializeSnapshot,
+} from "postgres";
+
+const oldSchema = normalizeSchema(
+  await parsePostgresSchema(`
+  CREATE TABLE users (
+    id uuid PRIMARY KEY
+  );
+`)
+);
+
+const newSchema = normalizeSchema(
+  await parsePostgresSchema(`
+  CREATE TABLE users (
+    id uuid PRIMARY KEY,
+    email text
+  );
+`)
+);
+
+const snapshot = serializeSnapshot(newSchema);
+const restored = parseSnapshot(snapshot);
+const plan = diffSchemas(oldSchema, restored);
+
+console.log(generatePostgresMigration(plan));
+```
+
+Generated migration SQL includes operation safety comments:
+
+```sql
+-- SAFE: add_column
+ALTER TABLE "users" ADD COLUMN "email" text;
+```
 
 ## Migration Diffing
 
@@ -220,7 +212,7 @@ The repo uses `justfile` for development commands.
 The intended architecture is provider-agnostic:
 
 ```text
-source parser / dialect importer
+SQL dialect parser / database introspection
   -> AST
   -> normalized IR
   -> diff engine
@@ -228,7 +220,7 @@ source parser / dialect importer
   -> target provider generator
 ```
 
-Near-term work should keep hardening the IR and diff model before adding more
-syntax or providers. Multi-dialect SQL import, database introspection, richer
-PostgreSQL features, and migration file orchestration can be layered on top once
-the core model is stable.
+Near-term work should harden the IR and diff model around PostgreSQL before
+adding more SQL dialects or providers. Database introspection, richer PostgreSQL
+features, and migration file orchestration can be layered on top once the core
+model is stable.

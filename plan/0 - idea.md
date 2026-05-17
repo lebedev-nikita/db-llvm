@@ -1,181 +1,51 @@
-# Моё обсуждение с ChatGPT
+# Project direction notes
 
-## Мой вопрос
+## Goal
 
-Я планирую создать свой DDL-язык для определения схем базы данных, и генерации по ней автоматических миграций, триггеров итд для разных бд-провайдеров. С чего стоит начать?Начните не с синтаксиса, а с **модели данных и diff-движка**.
+Build a compiler-style toolkit for database schemas: parse SQL schema
+definitions, normalize them into a stable IR, diff old/new snapshots, and
+generate migration SQL for the target database.
 
-## Ответ ChatGPT
+## Practical starting point
 
-Самый практичный порядок:
+Start with the data model and diff engine, not broad dialect coverage.
 
-1. **Определите внутренний AST/IR**
-   Ваш DDL-язык должен компилироваться не сразу в SQL, а в нейтральную модель:
+The first useful version should target PostgreSQL schema SQL:
 
-   ```ts
-   Schema {
-     tables: Table[]
-     enums: Enum[]
-     views: View[]
-     triggers: Trigger[]
-     policies: Policy[]
-     extensions: Extension[]
-   }
-   ```
+```sql
+CREATE TABLE users (
+  id uuid PRIMARY KEY,
+  email text UNIQUE NOT NULL,
+  created_at timestamp NOT NULL DEFAULT now()
+);
 
-   Это будет ядро проекта. Синтаксис потом можно менять, а IR должен быть стабильным.
+CREATE TABLE posts (
+  id uuid PRIMARY KEY,
+  author_id uuid NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+  title text NOT NULL,
+  body text
+);
 
-2. **Выберите минимальный MVP**
-   Не пытайтесь сразу покрыть PostgreSQL, MySQL, SQLite, ClickHouse и все триггеры.
-
-   Хороший MVP:
-
-   ```ddl
-   table users {
-     id uuid primary key
-     email text unique
-     created_at timestamp default now()
-   }
-
-   table posts {
-     id uuid primary key
-     author_id uuid references users.id on delete cascade
-     title text
-     body text?
-   }
-   ```
-
-   Генерация:
-   - `CREATE TABLE`
-   - индексы
-   - foreign keys
-   - простые миграции
-   - сначала только PostgreSQL
-
-3. **Сделайте schema diff**
-   Это главная сложность.
-
-   Нужно уметь сравнивать:
-
-   ```text
-   old schema
-   new schema
-   ↓
-   migration plan
-   ```
-
-   Например:
-
-   ```text
-   AddColumn(users, "name", text?, nullable=true)
-   RenameColumn(users, "username", "handle")
-   DropIndex(...)
-   ChangeColumnType(...)
-   ```
-
-   Важно: не все изменения безопасно выводятся автоматически. Например rename vs drop+add часто нельзя понять без подсказки.
-
-4. **Разделите миграции на safe / unsafe**
-   Например:
-
-   Safe:
-   - добавить nullable column (`type?`)
-   - добавить index concurrently
-   - добавить таблицу
-
-   Unsafe:
-   - удалить колонку
-   - изменить тип
-   - сделать nullable (`type?`) → non-null (`type`)
-   - переименовать без явного указания
-
-   Для unsafe-операций делайте предупреждения или требуйте аннотации:
-
-   ```ddl
-   @renamed_from("username")
-   handle text
-   ```
-
-5. **Сначала поддержите один provider**
-   Я бы начал с **PostgreSQL**:
-   - богатый DDL
-   - триггеры
-   - enum
-   - generated columns
-   - constraints
-   - extensions
-   - RLS
-   - partial indexes
-
-   Если архитектура выдержит PostgreSQL, потом проще добавить SQLite/MySQL.
-
-6. **Продумайте provider capabilities**
-   Не все БД умеют одно и то же. Сделайте слой возможностей:
-
-   ```ts
-   ProviderCapabilities {
-     supportsTransactionalDDL: boolean
-     supportsConcurrentIndexes: boolean
-     supportsEnums: boolean
-     supportsTriggers: boolean
-     supportsGeneratedColumns: boolean
-   }
-   ```
-
-7. **Не делайте язык слишком “SQL-like”**
-   Лучше декларативный DSL, а SQL генерировать как backend.
-
-   Например:
-
-   ```ddl
-   table users {
-     id uuid @primary
-     email string @unique
-     displayName string?
-     createdAt timestamp @default(now)
-   }
-   ```
-
-   А не:
-
-   ```sql
-   CREATE TABLE users (...)
-   ```
-
-8. **Сделайте snapshot-файл**
-   После каждой миграции сохраняйте нормализованную схему:
-
-   ```json
-   {
-     "version": 12,
-     "tables": {
-       "users": {
-         "columns": ...
-       }
-     }
-   }
-   ```
-
-   Потом новая схема сравнивается не с живой БД, а с последним snapshot. Это проще, надежнее и воспроизводимо.
-
-9. **Добавьте introspection позже**
-   Интроспекция существующей БД — отдельная большая задача. Не начинайте с нее.
-
-10. **Тестируйте миграции как компилятор**
-    Для каждого кейса:
-
-```text
-input old schema
-input new schema
-expected migration operations
-expected SQL
+CREATE INDEX posts_author_id ON posts (author_id);
 ```
 
-Это будет ядро качества.
+The MVP should support:
 
-Минимальная архитектура:
+- `CREATE TABLE`
+- columns
+- primary keys
+- unique constraints
+- indexes
+- foreign keys
+- defaults
+- nullable and not-null columns
+- simple migrations
+- PostgreSQL generation first
+
+## Core pipeline
 
 ```text
-DSL parser
+PostgreSQL schema SQL
    ↓
 AST
    ↓
@@ -190,22 +60,109 @@ provider SQL generator
 migration files + snapshot
 ```
 
-Я бы начал с такого MVP:
+## Schema diff
+
+The diff engine compares:
+
+```text
+old schema snapshot
+new schema snapshot
+↓
+migration plan
+```
+
+Example operations:
+
+```text
+AddColumn(users, "name", text, nullable=true)
+RenameColumn(users, "username", "handle")
+DropIndex(...)
+ChangeColumnType(...)
+```
+
+Not every change can be inferred safely. Rename vs. drop+add often needs an
+explicit hint or manual review.
+
+## Safety model
+
+Safe examples:
+
+- add a nullable column
+- add an index
+- add a table
+
+Unsafe examples:
+
+- drop a column
+- change a type
+- make a nullable column not-null
+- infer a rename without an explicit hint
+
+Unsafe operations should produce warnings or require explicit annotations in the
+migration plan.
+
+## Provider capabilities
+
+Providers do not support the same features. Keep a capabilities layer:
+
+```ts
+type ProviderCapabilities = {
+  supportsTransactionalDDL: boolean;
+  supportsConcurrentIndexes: boolean;
+  supportsEnums: boolean;
+  supportsTriggers: boolean;
+  supportsGeneratedColumns: boolean;
+};
+```
+
+## Snapshot files
+
+After each migration, save the normalized schema:
+
+```json
+{
+  "version": 12,
+  "tables": {
+    "users": {
+      "columns": []
+    }
+  }
+}
+```
+
+New schemas should be compared to the last snapshot first. Database
+introspection is useful later, but snapshots are simpler and reproducible for
+the first implementation.
+
+## Testing approach
+
+Test migrations like a compiler:
+
+```text
+input old schema
+input new schema
+expected migration operations
+expected SQL
+```
+
+## MVP
 
 ```text
 v0.1:
-- PostgreSQL only
+- PostgreSQL schema SQL input
+- PostgreSQL output
 - tables
 - columns
 - primary keys
-- unique
+- unique constraints
 - indexes
 - foreign keys
 - defaults
-- non-null by default, nullable with `?`
-- schema snapshot
+- nullable/not-null
+- schema snapshots
 - diff old/new
 - SQL migration generation
 ```
 
-Триггеры, RLS, views, stored procedures и multi-provider лучше добавлять после того, как diff-модель станет устойчивой.
+Triggers, RLS, views, stored procedures, introspection, and additional providers
+should come after the diff model is stable.

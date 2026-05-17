@@ -210,6 +210,9 @@ importers:
       dedent-js:
         specifier: ^1.0.1
         version: 1.0.1
+      pgsql-parser:
+        specifier: ^17.9.15
+        version: 17.9.15
     devDependencies:
       '@types/node':
         specifier: ^25.8.0
@@ -403,6 +406,12 @@ packages:
   '@oxc-project/types@0.130.0':
     resolution: {integrity: sha512-ibD2usx9JRu7f5pu2tMKMI4cpA4NgXJQoYRP4pQ7Pxmn1l6k/53qWtQWZayhYy3X4QZkt90Ot+mJEaeXouio6Q==}
 
+  '@pgsql/quotes@17.1.0':
+    resolution: {integrity: sha512-J/H+LcrENBpYgL45WW6aTjb5Yk4tX4+AmB2/k8KZa+Zh3wiCtqmNIag+HZz5HmWaF6EZK9ZGC95NBD1fs+rUvg==}
+
+  '@pgsql/types@17.6.2':
+    resolution: {integrity: sha512-1UtbELdbqNdyOShhrVfSz3a1gDi0s9XXiQemx+6QqtsrXe62a6zOGU+vjb2GRfG5jeEokI1zBBcfD42enRv0Rw==}
+
   '@rolldown/binding-android-arm64@1.0.1':
     resolution: {integrity: sha512-fJI3I0r3C3Oj/zdBCpaCmBRZYf07xpaq4yCfDDoSFm+beWNzbIl26puW8RraUdugoJw/95zerNOn6jasAhzSmg==}
     engines: {node: ^20.19.0 || >=22.12.0}
@@ -595,6 +604,9 @@ packages:
     engines: {node: ^8.16.0 || ^10.6.0 || >=11.0.0}
     os: [darwin]
 
+  libpg-query@17.7.3:
+    resolution: {integrity: sha512-lHKBvoWRsXt/9bJxpAeFxkLu0CA6tELusqy3o1z6/DwGXSETxhKJDaNlNdrNV8msvXDLBhpg/4RE/fKKs5rYFA==}
+
   lightningcss-android-arm64@1.32.0:
     resolution: {integrity: sha512-YK7/ClTt4kAK0vo6w3X+Pnm0D2cf2vPHbhOXdoNti1Ga0al1P4TBZhwjATvjNwLEBCnKvjJc2jQgHXH0NEwlAg==}
     engines: {node: '>= 12.0.0'}
@@ -682,6 +694,12 @@ packages:
 
   pathe@2.0.3:
     resolution: {integrity: sha512-WUjGcAqP1gQacoQe+OBJsFA7Ld4DyXuUIjZ5cc75cLHvJ7dtNsTugphxIADwspS+AraAUePCKrSVtPLFj/F88w==}
+
+  pgsql-deparser@17.18.3:
+    resolution: {integrity: sha512-lD8kPWgw9KAbUbKbQKgzDGzVdtEmp25N+7qZl62I7v8Uu9Wqy7+M0EOeU96++OgPD9S1pyp9MKNGzZzPJF2C4Q==}
+
+  pgsql-parser@17.9.15:
+    resolution: {integrity: sha512-6+k0EtTn0CEQTR5v2APARu9En4vm46TpmpdMSfKDHkZwWZuEc08B7SeVg32VxNQ2HD5xk+dQ9TD0k9m+S+vFgg==}
 
   picocolors@1.1.1:
     resolution: {integrity: sha512-xceH2snhtb5M9liqDsmEw56le376mTZkEX/jEb/RxNFyegNul7eNslCXP9FDj/Lcu0X8KEyMceP2ntpaHrDEVA==}
@@ -939,6 +957,10 @@ snapshots:
 
   '@oxc-project/types@0.130.0': {}
 
+  '@pgsql/quotes@17.1.0': {}
+
+  '@pgsql/types@17.6.2': {}
+
   '@rolldown/binding-android-arm64@1.0.1':
     optional: true
 
@@ -1105,6 +1127,10 @@ snapshots:
   fsevents@2.3.3:
     optional: true
 
+  libpg-query@17.7.3:
+    dependencies:
+      '@pgsql/types': 17.6.2
+
   lightningcss-android-arm64@1.32.0:
     optional: true
 
@@ -1163,6 +1189,17 @@ snapshots:
   obug@2.1.1: {}
 
   pathe@2.0.3: {}
+
+  pgsql-deparser@17.18.3:
+    dependencies:
+      '@pgsql/quotes': 17.1.0
+      '@pgsql/types': 17.6.2
+
+  pgsql-parser@17.9.15:
+    dependencies:
+      '@pgsql/types': 17.6.2
+      libpg-query: 17.7.3
+      pgsql-deparser: 17.18.3
 
   picocolors@1.1.1: {}
 
